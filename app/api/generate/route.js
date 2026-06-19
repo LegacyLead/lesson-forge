@@ -3,11 +3,8 @@ import { GoogleGenAI } from '@google/genai';
 
 // Hardcoded for direct execution reliability
 
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-
 export async function POST(request) {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     try {
         const { 
             className, 
