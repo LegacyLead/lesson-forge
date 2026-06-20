@@ -1,76 +1,41 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
-export async function POST(request) {
-  // 1. Initialize the stable client using your environment key
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  
-  // 2. Get the model instance directly
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
+export async function POST(req) {
   try {
-    const {
-      className,
-      subject,
-      topic,
-      week,
-      customInstructions,
-      syllabusImages,
-      templateImages
-    } = await request.json();
+    const { prompt, format, elements } = await req.json();
 
-    if ((!syllabusImages || syllabusImages.length === 0) && !topic) {
-      return NextResponse.json({ error: "Please input a topic or snap your syllabus pages." }, { status: 400 });
+    // Constructing the developer instruction context
+    const systemPrompt = `You are an expert curriculum design assistant. Generate high-quality lesson plans, question banks, and structural academic schemes based precisely on the user's request.`;
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        // llama-3.3-70b-versatile is incredible for structured educational tasks
+        model: "llama-3.3-70b-versatile", 
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Format Requirement: ${format || 'Standard text'}\nContext Elements: ${JSON.stringify(elements || {})}\n\nTask: ${prompt}` }
+        ],
+        temperature: 0.3
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return NextResponse.json({ error: errorData.error?.message || "Groq Request Failed" }, { status: response.status });
     }
 
-    let contentsArray = [];
+    const data = await response.json();
+    const resultText = data.choices[0]?.message?.content || "";
 
-    // Attach Syllabus pages if present
-    if (syllabusImages && syllabusImages.length > 0) {
-      syllabusImages.forEach((img) => {
-        contentsArray.push({
-          inlineData: {
-            data: img.base64,
-            mimeType: img.mimeType
-          }
-        });
-      });
-    }
-
-    // Attach Template pages if present
-    if (templateImages && templateImages.length > 0) {
-      templateImages.forEach((img) => {
-        contentsArray.push({
-          inlineData: {
-            data: img.base64,
-            mimeType: img.mimeType
-          }
-        });
-      });
-    }
-
-    // 3. Formulate the core prompt text
-    const corePrompt = `
-      You are an expert curriculum developer and educator. Generate a highly detailed, comprehensive school lesson note based on the provided materials.
-      Class: ${className}
-      Subject: ${subject}
-      Topic: ${topic || 'Extract from the attached syllabus scheme page'}
-      Week: ${week}
-      Special Instructions: ${customInstructions || 'None'}
-      
-      Output ONLY valid, beautifully structured HTML wrapped inside a clean layout. Use <h1>, <h2>, <h3>, <p>, <ul>, <li>, and <table> tags where appropriate. Do not include markdown code block backticks (\`\`\`html) in your response.
-    `;
-
-    contentsArray.push(corePrompt);
-
-    // 4. CRUCIAL FIX: Call generateContent directly on the model variable!
-    const response = await model.generateContent(contentsArray);
-    const resultText = response.response.text();
-
-    return NextResponse.json({ html: resultText });
+    return NextResponse.json({ success: true, text: resultText });
 
   } catch (error) {
-    console.error("Generation Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Backend Error:", error);
+    return NextResponse.json({ error: "Internal Server Error Occurred" }, { status: 500 });
   }
 }
