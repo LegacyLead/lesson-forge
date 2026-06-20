@@ -1,76 +1,76 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-
-
 export async function POST(request) {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const ai = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    try {
-        const { 
-            className, 
-            subject, 
-            topic, 
-            week, 
-            customInstructions, // New variable passed from frontend
-            syllabusImages, 
-            templateImages  
-        } = await request.json();
+  // 1. Initialize the stable client using your environment key
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  
+  // 2. Get the model instance directly
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        if ((!syllabusImages || syllabusImages.length === 0) && !topic) {
-            return NextResponse.json({ error: "Please input a topic or snap your syllabus pages." }, { status: 400 });
-        }
+  try {
+    const {
+      className,
+      subject,
+      topic,
+      week,
+      customInstructions,
+      syllabusImages,
+      templateImages
+    } = await request.json();
 
-        let contentsArray = [];
-
-        // Attach Syllabus pages if present
-        if (syllabusImages && syllabusImages.length > 0) {
-            syllabusImages.forEach(img => {
-                contentsArray.push({
-                    inlineData: { data: img.base64, mimeType: img.mimeType }
-                });
-            });
-        }
-
-        // Attach School Template format layouts if present
-        if (templateImages && templateImages.length > 0) {
-            templateImages.forEach(img => {
-                contentsArray.push({
-                    inlineData: { data: img.base64, mimeType: img.mimeType }
-                });
-            });
-        }
-
-        // We integrate the custom instructions dynamically inside the system prompt template
-        const comprehensivePrompt = `
-You are an expert curriculum designer and senior education officer. Your task is to write a highly detailed, comprehensive Lesson Note based on the provided inputs.
-
-CORE ATTRIBUTES:
-- Class Level: ${className || 'Not Specified'}
-- Subject: ${subject || 'Not Specified'}
-- Topic: ${topic || 'Extract topic details from the uploaded syllabus files'}
-- Week: ${week || 'Not Specified'}
-
-ADDITIONAL TEACHER CUSTOMIZATION REQUESTS:
-${customInstructions ? `CRITICAL USER RULES: ${customInstructions}` : 'None specified. Follow standard structural layout.'}
-
-CRITICAL FORMATTING INSTRUCTIONS:
-1. Examine all provided School Template Images closely. You MUST clone its structural layout, sections, tables, and sequence exactly. 
-2. Output the final note using clean, styled semantic HTML tags (like <h1>, <h2>, <p>, <ul>, <li>, <strong>, <table>, <tr>, <td>).
-3. Do NOT wrap the code inside markdown block wraps (\`\`\`html) or raw markdown text. Deliver pure clean HTML contents.
-`;
-
-        contentsArray.push(comprehensivePrompt);
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: contentsArray,
-        });
-
-        return NextResponse.json({ html: response.text });
-
-    } catch (error) {
-        console.error("Pipeline Error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    if ((!syllabusImages || syllabusImages.length === 0) && !topic) {
+      return NextResponse.json({ error: "Please input a topic or snap your syllabus pages." }, { status: 400 });
     }
+
+    let contentsArray = [];
+
+    // Attach Syllabus pages if present
+    if (syllabusImages && syllabusImages.length > 0) {
+      syllabusImages.forEach((img) => {
+        contentsArray.push({
+          inlineData: {
+            data: img.base64,
+            mimeType: img.mimeType
+          }
+        });
+      });
+    }
+
+    // Attach Template pages if present
+    if (templateImages && templateImages.length > 0) {
+      templateImages.forEach((img) => {
+        contentsArray.push({
+          inlineData: {
+            data: img.base64,
+            mimeType: img.mimeType
+          }
+        });
+      });
+    }
+
+    // 3. Formulate the core prompt text
+    const corePrompt = `
+      You are an expert curriculum developer and educator. Generate a highly detailed, comprehensive school lesson note based on the provided materials.
+      Class: ${className}
+      Subject: ${subject}
+      Topic: ${topic || 'Extract from the attached syllabus scheme page'}
+      Week: ${week}
+      Special Instructions: ${customInstructions || 'None'}
+      
+      Output ONLY valid, beautifully structured HTML wrapped inside a clean layout. Use <h1>, <h2>, <h3>, <p>, <ul>, <li>, and <table> tags where appropriate. Do not include markdown code block backticks (\`\`\`html) in your response.
+    `;
+
+    contentsArray.push(corePrompt);
+
+    // 4. CRUCIAL FIX: Call generateContent directly on the model variable!
+    const response = await model.generateContent(contentsArray);
+    const resultText = response.response.text();
+
+    return NextResponse.json({ html: resultText });
+
+  } catch (error) {
+    console.error("Generation Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
