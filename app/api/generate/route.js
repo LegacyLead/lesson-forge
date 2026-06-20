@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Hardcoded for direct execution reliability
+
 
 export async function POST(request) {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const ai = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     try {
         const { 
             className, 
